@@ -718,7 +718,7 @@ my ($print_out, $perf_out) = (undef, undef);
 # make all checks and output for all interfaces
 for (my $i = 0; $i < $num_int; $i++) {
     $print_out .= ", " if (defined($print_out));
-    $perf_out  .= " "  if (defined($perf_out));
+    
     my $usable_data = 1;
 
     # Get the status of the current interface
@@ -726,7 +726,10 @@ for (my $i = 0; $i < $num_int; $i++) {
         = defined($o_admin)
         ? $$result{ $admin_table . $tindex[$i] }
         : $$result{ $oper_table . $tindex[$i] };
-
+    
+    # Add spaces only if necessary
+    $perf_out .= " " if (defined ($perf_out) && $int_status==2 ) ;
+    
     # Make the bandwith & error checks if necessary
     if (defined($o_checkperf) && $int_status == 1) {
         $temp_file_name = $descr[$i];
@@ -990,24 +993,25 @@ alarm(0);
 
 # Check if all interface are OK
 if ($num_ok == $num_int) {
+    my $is_perf_defined = defined($perf_out) && defined($o_perf);
     if ($final_status == 0) {
         print $print_out, ":", $num_ok, " UP: OK";
-        if (defined($o_perf)) { print " | ", $perf_out; }
+        if ($is_perf_defined) { print " | ", $perf_out; }
         print "\n";
         exit $ERRORS{"OK"};
     } elsif ($final_status == 1) {
         print $print_out, ":(", $num_ok, " UP): WARNING";
-        if (defined($o_perf)) { print " | ", $perf_out; }
+        if ($is_perf_defined) { print " | ", $perf_out; }
         print "\n";
         exit $ERRORS{"WARNING"};
     } elsif ($final_status == 2) {
         print $print_out, ":(", $num_ok, " UP): CRITICAL";
-        if (defined($o_perf)) { print " | ", $perf_out; }
+        if ($is_perf_defined) { print " | ", $perf_out; }
         print "\n";
         exit $ERRORS{"CRITICAL"};
     } else {
         print $print_out, ":(", $num_ok, " UP): UNKNOWN";
-        if (defined($perf_out)) { print " | ", $perf_out; }
+        if ($is_perf_defined) { print " | ", $perf_out; }
         print "\n";
         exit $ERRORS{"UNKNOWN"};
     }
