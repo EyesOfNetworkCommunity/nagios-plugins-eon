@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w 
 ############################## check_snmp_mem ##############
-my $VERSION = "2.1.0";
+my $VERSION = "2.2";
 
 # Date : 17 October 2007
 # Author  : Patrick Proy (nagios at proy.org)
@@ -25,13 +25,14 @@ my %ERRORS = ('OK' => 0, 'WARNING' => 1, 'CRITICAL' => 2, 'UNKNOWN' => 3, 'DEPEN
 
 # Net-snmp memory
 
-my $nets_ram_free   = "1.3.6.1.4.1.2021.4.6.0";     # Real memory free
-my $nets_ram_total  = "1.3.6.1.4.1.2021.4.5.0";     # Real memory total
+my $nets_ram_avail   = "1.3.6.1.4.1.2021.4.6.0";     # Real memory available
+my $nets_ram_total_real  = "1.3.6.1.4.1.2021.4.5.0";     # Real memory total 
+my $nets_ram_total_real_free = "1.3.6.1.4.1.2021.4.11.0"; # Real memory total free
 my $nets_ram_buffer = "1.3.6.1.4.1.2021.4.14.0";    # Real memory buffered
 my $nets_ram_cache  = "1.3.6.1.4.1.2021.4.15.0";    # Real memory cached
 my $nets_swap_free  = "1.3.6.1.4.1.2021.4.4.0";     # swap memory free
 my $nets_swap_total = "1.3.6.1.4.1.2021.4.3.0";     # Swap memory total
-my @nets_oids = ($nets_ram_free, $nets_ram_total, $nets_swap_free, $nets_swap_total, $nets_ram_cache, $nets_ram_buffer);
+my @nets_oids = ($nets_ram_avail, $nets_ram_total_real, $nets_ram_total_real_free, $nets_swap_free, $nets_swap_total, $nets_ram_cache, $nets_ram_buffer);
 
 # Cisco
 
@@ -576,18 +577,57 @@ if (defined($o_netsnmp)) {
         $totalcachedbuffered = $totalcachedbuffered + $$resultat{$nets_ram_cache};
     }
 
-    $realused = ($$resultat{$nets_ram_total} - ($$resultat{$nets_ram_free} + $totalcachedbuffered))
-        / $$resultat{$nets_ram_total};
-    if ($$resultat{$nets_ram_total} == 0) { $realused = 0; }
+    #verb ("Total RAM : $$resultat{$nets_ram_total_real}");
+    #verb ("RAM Free : $$resultat{$nets_ram_avail}");
+    #verb ("RAM Buffered : $totalcachedbuffered");
+
+    #Memory calculation 
+    my $available = $$resultat{$nets_ram_avail};
+    my $total = $$resultat{$nets_ram_total_real};
+    my $buffer = $$resultat{$nets_ram_buffer};
+    my $cached = $$resultat{$nets_ram_cache};
+    my $used_negative = 0;
+    my ($used, $free, $prct_used, $prct_free) = (0, 0, 0, 0);
+
+    verb ("Available : $available");
+    verb ("Total : $total");
+    verb ("Buffer : $buffer");
+    verb ("Cached : $cached");
+
+    if ($total != 0) {
+        $used = $total - $available - $buffer - $cached;
+
+        #if you have net-snmp-config >= 5.2.7-43 
+        if ($used < 0 ) { 
+            $used = $total - $available;
+            $free = $available;
+            $used_negative = 1;
+        } else { 
+            $free =  $total - $used;
+        }
+        
+        $prct_used = $used * 100 / $total;
+        $prct_free = 100 - $prct_used;
+    }
+
+    verb ("Used : $used");
+    verb ("Free : $free");
+    verb ("Prct used : $prct_used");
+    verb ("Prct free : $prct_free");
+
+    if ($$resultat{$nets_ram_total_real} == 0) { $realused = 0; }
     $swapused
         = ($$resultat{$nets_swap_total} == 0)
         ? 0
         : ($$resultat{$nets_swap_total} - $$resultat{$nets_swap_free}) / $$resultat{$nets_swap_total};
-    $realused = round($realused * 100, 0);
+    $realused = round($prct_used,0);
     $swapused = round($swapused * 100, 0);
-    verb(
-"Ram : $$resultat{$nets_ram_free} ($$resultat{$nets_ram_cache} cached, $$resultat{$nets_ram_buffer} buff) / $$resultat{$nets_ram_total} : $realused"
-    );
+    $used_negative eq 1 ? verb( "Ram : $total - $available") : verb( "Ram : $total - $available - $buffer buff - $cached cached");
+
+    verb ("Swap Total : $$resultat{$nets_swap_total}");
+    verb ("Swap Free : $$resultat{$nets_swap_free}");
+    verb ("Prct swap used : $swapused");
+    
     verb("Swap : $$resultat{$nets_swap_free} / $$resultat{$nets_swap_total} : $swapused");
 
     my $n_status = "OK";
@@ -603,22 +643,19 @@ if (defined($o_netsnmp)) {
     }
     $n_output .= " ; " . $n_status;
     if (defined($o_perf)) {
-        my $perf_ramused = ($$resultat{$nets_ram_total} - $$resultat{$nets_ram_free});
-        $perf_ramused -= $$resultat{$nets_ram_cache}  if $o_perf > 1 or !defined($o_cache);
-        $perf_ramused -= $$resultat{$nets_ram_buffer} if $o_perf > 1 or defined($o_buffer);
-
-        $n_output .= " | ram_used=$perf_ramused;";
-        $n_output .= ($o_warnR == 0) ? ";" : round($o_warnR * $$resultat{$nets_ram_total} / 100, 0) . ";";
-        $n_output .= ($o_critR == 0) ? ";" : round($o_critR * $$resultat{$nets_ram_total} / 100, 0) . ";";
-        $n_output .= "0;" . $$resultat{$nets_ram_total} . " ";
+        
+        $n_output .= " | ram_used=$used;";
+        $n_output .= ($o_warnR == 0) ? ";" : round($o_warnR * $$resultat{$nets_ram_total_real} / 100, 0) . ";";
+        $n_output .= ($o_critR == 0) ? ";" : round($o_critR * $$resultat{$nets_ram_total_real} / 100, 0) . ";";
+        $n_output .= "0;" . $$resultat{$nets_ram_total_real} . " ";
         $n_output .= "swap_used=" . ($$resultat{$nets_swap_total} - $$resultat{$nets_swap_free}) . ";";
         $n_output .= ($o_warnS == 0) ? ";" : round($o_warnS * $$resultat{$nets_swap_total} / 100, 0) . ";";
         $n_output .= ($o_critS == 0) ? ";" : round($o_critS * $$resultat{$nets_swap_total} / 100, 0) . ";";
         $n_output .= "0;" . $$resultat{$nets_swap_total};
 
         if ($o_perf > 1) {
-            $n_output .= " buffered=" . $$resultat{$nets_ram_buffer} . ';;;0;' . $$resultat{$nets_ram_total};
-            $n_output .= " cached="   . $$resultat{$nets_ram_cache}  . ';;;0;' . $$resultat{$nets_ram_total};
+            $n_output .= " buffered=" . $$resultat{$nets_ram_buffer} . ';;;0;' . $$resultat{$nets_ram_total_real};
+            $n_output .= " cached="   . $$resultat{$nets_ram_cache}  . ';;;0;' . $$resultat{$nets_ram_total_real};
         }
     }
     $session->close;
