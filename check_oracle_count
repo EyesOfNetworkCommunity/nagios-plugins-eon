@@ -1,0 +1,110 @@
+#!/bin/sh
+
+#########################################################################################################################
+#
+# ARES Global Services, nb lines oracle request check script; must be used in conjonction with ssh and check_by_ssh scripts
+#
+#########################################################################################################################
+
+#conf special client oracle
+CLASSPATH=:/usr/lib/oracle/10.1.0.2/client/bin:/usr/local/bin:/bin:/usr/bin:/usr/sbin:/usr/local/bin:/bin:/usr/lib/oracle/10.1.0.2/client/lib
+ORACLE_TERM=xterm
+ORACLE_HOME=/usr/lib/oracle/10.1.0.2/client
+TNS_ADMIN=/home/nagios/oracle/network/admin/
+LD_LIBRARY_PATH=/usr/lib/oracle/10.1.0.2/client/lib:/lib:/usr/lib
+NLS_LANGUAGE=AMERICAN
+
+export CLASSPATH ORACLE_TERM ORACLE_HOME TNS_ADMIN LD_LIBRARY_PATH NLS_LANGUAGE
+#fin conf speciale client oracle
+
+
+# get the program path
+PROGPATH=`echo $0 | sed -e 's,[\\/][^\\/][^\\/]*$,,'`
+
+# just include some standard declarations
+. ${PROGPATH}/utils.sh
+
+# display how to use this script if needed
+help()
+{
+        echo "$0 -B base -R request -U user -P password [-C critical_nblines] [-W warning_nblines]"
+	echo "critical_nblines defaults to 90"
+	echo "warning_nblines defaults to 80"
+}
+
+# local variables
+WARNING=80
+CRITICAL=90
+
+# check the script command line
+while [ $# -gt 0 ]; do
+        case $1 in
+                -B)
+                        shift
+			BASE="$1"
+                        shift
+                        ;;
+		-R)
+                        shift
+                        REQ="$1"
+                        shift
+                        ;;
+		-U)
+                        shift
+                        USER="$1"
+                        shift
+                        ;;
+		-P)
+                        shift
+                        PASS="$1"
+                        shift
+                        ;;
+
+		-W)
+			shift
+			WARNING="$1"
+                        shift
+			;;
+		-C)
+			shift
+			CRITICAL="$1"
+                        shift
+			;;
+                *)
+                        help
+                        exit -1
+                        ;;
+        esac
+done
+
+# check scripts arg coherency...
+if [ "${CRITICAL}" -lt "${WARNING}" ]; then
+	echo "Specified critical state is lower than the specified warning state !"
+fi
+
+# let's check the count request
+REQUEST=`sqlplus ${USER}/${PASS}@${BASE} << **
+${REQ};`
+
+RESULT=`echo ${REQUEST} |gawk -F "----------" '{ print $2 }' |gawk -F " " '{ print $1 }'`
+
+# check return syntax
+if ! echo ${REQUEST} |grep COUNT > /dev/null 2>&1; then
+	echo "REQUEST ERROR !!!"
+       exit ${STATE_UNKNOWN}	
+fi
+
+# just print the information
+echo "${RESULT} lines found in table"
+
+# check the result intervall
+if [ "${RESULT}" -gt "${WARNING}" ]; then
+	if [ "${RESULT}" -lt "${CRITICAL}" ]; then
+		exit ${STATE_WARNING}
+	else
+		exit ${STATE_CRITICAL}
+	fi
+fi
+
+# ok
+exit ${STATE_OK}

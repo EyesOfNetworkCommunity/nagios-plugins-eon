@@ -1,0 +1,20 @@
+# hour;duration;host;service
+
+# Author: Author means responsible person, group or account of downtime.
+# Comment: Reason of downtime
+# Day: of the week applicable separated by , or * for All day.
+# Hour: Could be * for every hour and 0 to 23. Minutes are separated by ':'  
+# Duration: Could be * for 24h and 0-23 for quantity and separate by ':' 
+# Host: is host :-/
+# Service: could be blank for all services of a host or a single service.
+
+# begin is for comment.
+#
+#EyesOfNetwork Administrator;Reboot of server;Mon;14;5;host1
+#Mike;Patch application;Mon,Tue;*;*;host2;systime
+#Emmanuelle et Guillaume;Weekly reboot;*;3;1;host3;uptime;
+#Mike;Weekly reboot;*;18:51;00:22;jerez;systime
+#Manu et mike;changement de serveur;*;*;00:2;sma2900;
+#Manu;test;Mon,Tue;*;00:4;sma2900;
+#Emmanuelle Texeire;Weekly reboot;*;*;00:20;jerez;systime
+
