@@ -2,7 +2,7 @@
 #
 # Josh Yost
 # written: 07.14.06
-# updated: 06.05.07
+# updated: 17.06.20 (Rémi VERCHERE <remi.verchere@axians.com>)
 #
 # 	Use the output of snmpget hrSystemDate.0 to create warning/critical
 # signals to Nagios w/ the help of Time::Local and localtime().
@@ -14,6 +14,8 @@
 # 	mailto: joshyost@gmail.com
 # 
 # VERSIONS
+# 1.0.6
+#       - add timezone option
 # 1.0.5 
 # 	- switched to Getopt::Long
 # 	- all non-zero snmpget exits are UNKNOWN, bad usage is UNKNOWN
@@ -32,10 +34,11 @@ use Getopt::Long;
 use Time::Local;
 use lib "/usr/lib64/nagios/plugins";
 use utils qw ( %ERRORS $TIMEOUT );
+use POSIX qw ( tzset );
 
 our $snmpget = '/usr/bin/snmpget';
 our $exe     = basename $0;
-our $vers    = '1.0.5';
+our $vers    = '1.0.6';
 
 #########################88### Functions ###################################
 sub usage{
@@ -73,6 +76,7 @@ sub HELP{
         "  -u,--username <arg>\n",          "     Set the SNMPv3 username\n",
         "  -x,--privproto DES|AES\n",       "     Set the SNMPv3 priv protocol (defaults to DES)\n",
         "  -X,--privpass <arg>\n",          "     Set the SNMPv3 privacy passphrase\n",
+        "  -z,--timezone <arg>\n",          "     Set the Timezone\n",
         "\nCAVEATS\n",
         " - This script depends on having net-snmp's snmpget installed.\n",
         " - The executable path is hard-coded to '/usr/bin/snmpget.' Please edit the\n",
@@ -99,7 +103,8 @@ my %opts;
 GetOptions(\%opts, 'authproto|a=s','authpass|A=s',   'community|C=s','debug|d',
                    'secengine|e=s','conengine|E=s',  'help|h',       'host|H=s',
 		   'num|n=i',      'context|N=s',    'snmpversion|v=s', 'timeout|t=i',
-		   'version|V',    'username|u=s',   'privproto|x=s','privpass|X=s') || &usage();
+		   'version|V',    'username|u=s',   'privproto|x=s','privpass|X=s',
+		   'timezone|z=s') || &usage();
 
 &HELP()  if defined($opts{help});
 &VERS()  if defined($opts{version});
@@ -119,6 +124,7 @@ my $timeout  = ($opts{timeout} || $TIMEOUT);
 my $user     =  $opts{username}  if defined ($opts{username});
 my $pproto   = ($opts{privproto} || 'DES');
 my $pphrase  =  $opts{privpass}  if defined ($opts{privpass});
+my $timezone =  $opts{timezone}  if defined ($opts{timezone});
 
 #### sanity checksy
 if (!(defined($host) && (defined($pass) || defined($user)))){
@@ -169,6 +175,11 @@ elsif ($snmpvers eq '1' || $snmpvers eq '2c'){
 else{
   print "ERROR - SNMPv3 requires at least the '-u' option.\n";
   &usage();
+}
+
+if (defined($timezone)) {
+  $ENV{TZ} = $timezone;
+  tzset;
 }
 
 #### Actual syscall
